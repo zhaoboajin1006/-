@@ -34,6 +34,15 @@ struct usr
 	struct usr *next;
 };
 
+struct history
+{
+	char flag;
+	char bookname[20];
+	char bookwriter[20];
+	char usrname[20];
+	struct history *next;
+};
+
 int adm(struct usr *pusrhead);
 
 int user(struct usr *pusr);
@@ -56,22 +65,26 @@ struct book *bookdiscover(struct bookdir *pbookdirhead,struct book *pbook);  /*�
 
 struct book *bookdirdiscover(struct bookdir *pbookdirhead,char *group); /*按类查找书籍*/
 
-int bookchange(struct bookdir *pdirhead);  /*书籍信息修改*/
+int bookchange(struct bookdir *pdirhead);    /*书籍信息修改*/
 
-int bookprint(struct bookdir *pbookdirhead);  /*数据统计后输出*/
+int bookprint(struct bookdir *pbookdirhead);    /*数据统计后输出*/
 
-struct usr *usrdenglu(struct usr *pusrhead);    /*用户登陆,传入用户信息链表的头指针，返回登陆成功时用户信息的节点指针*/
+struct usr *usrdenglu(struct usr *pusrhead);     /*用户登陆,传入用户信息链表的头指针，返回登陆成功时用户信息的节点指针*/
+
+int usrhistorysave(char flag,struct book *pbook,const char *name,char *time);    /*在用户专属文件中存储借阅记录*/
+
+struct history *usrhistoryload(const char *name);
+
+void usrhistoryprint(const char *name);/**/
 
 /*归还或借出书籍并记录借阅历史*/
-int bookoperation(struct book *pbook,char *name,int number,char flag);
+int bookoperation(struct book *pbook,const char *name,char flag);
 
-struct usr *usradd(struct usr *pusrhead,struct usr *pusr);/*添加用户信息*/
+struct usr *usradd(struct usr *pusrhead,struct usr *pusr);  /*添加用户信息*/
 
-struct usr *usrload(void);
+struct usr *usrload(void);  /*载入用户信息*/
 
-int usrcmp(struct usr *pusrhead,struct usr *pusr);
-
-int usrsave(struct usr *pusrhead);
+int usrsave(struct usr *pusrhead);   /*存储用户信息*/
 
 
 int main(void)
@@ -146,7 +159,7 @@ int adm(struct usr *pusrhead)
 	char c;
 	int number=0;
 	if((pbookdirhead=bookload()) == NULL){
-		printf("读取文件出错");
+		printf("读取文件出错\n");
 	}
 	while(1){
 		switch(adm_interface()){
@@ -191,7 +204,7 @@ int adm(struct usr *pusrhead)
 				bookchange(pbookdirhead);
 				break;
 			case 5:
-				printf("输入欲借阅或归还的书籍信息");	
+				printf("输入欲借阅或归还的书籍信息\n");	
 				pbook=(struct book *)malloc(sizeof(struct book));
 				printf("请输入书名：");
 				scanf("%s",pbook->bookname);
@@ -204,32 +217,38 @@ int adm(struct usr *pusrhead)
 				else{
 					printf("查找到书籍:\n书名:%s,书籍作者:%s,书籍类型;%s,书籍总数:%d,书籍剩余数量:%d\n",pbooktemp->bookname,pbooktemp->bookwriter,pbooktemp->bookgroup,pbooktemp->booknumber,pbooktemp->booksp);
 				}
-				printf("借阅用户信息确认：");
+				printf("借阅用户信息确认：\n");
 				if((pusr=usrdenglu(pusrhead)) == NULL){
 					printf("信息确认失败。");
 					break;
 				}
-				printf("用户信息确认成功。请输入数量：");
-				scanf("%d",&number);
-				getchar();
+				if(strcmp(pusr->name,"0000") == 0){
+					printf("借阅用户不允许为管理员用户。\n");
+					break;
+				}
+				printf("用户信息确认成功。\n");
 				printf("\n1.借阅。\n2.归还。\n0.取消。\n请选择：");
+				getchar();
 				scanf("%c",&c);
 				switch(c){
 					case '1':
 						c='b';
-						if(bookoperation(pbooktemp,pusr->name,number,c) == -1){
-							printf("操作失败。");
+						if(bookoperation(pbooktemp,pusr->name,c) == -1){
+							printf("操作失败。\n");
 						}
 						break;
 					case '2':
 						c='r';
-						if(bookoperation(pbooktemp,pusr->name,number,c) == -1){
-							printf("操作失败。");
+						if(bookoperation(pbooktemp,pusr->name,c) == -1){
+							printf("操作失败。\n");
 						}
 						break;
 					default:
 						break;
 				}
+				break;
+			case 6:
+				usrhistoryprint("bookhistory");
 				break;
 			default:
 				if(booksave(pbookdirhead) == -1){
@@ -256,7 +275,7 @@ int user(struct usr *pusr)
 	char bookgroup[20];
 	char password[20];
 	if((pbookdirhead=bookload()) == NULL){
-		printf("书库信息读取错误！");
+		printf("书库信息读取错误！\n");
 		return -1;
 	}
 	while(1){
@@ -272,7 +291,7 @@ int user(struct usr *pusr)
 					printf("无此书籍信息");
 				}
 				else{
-					printf("查找到书籍:\n书名:%s,书籍作者:%s,书籍类型;%s,书籍总数:%d,书籍剩余数量:%d\n");;
+					printf("查找到书籍:\n书名:%s,书籍作者:%s,书籍类型;%s,书籍总数:%d,书籍剩余数量:%d\n",pbooktemp->bookname,pbooktemp->bookwriter,pbooktemp->bookgroup,pbooktemp->booknumber,pbooktemp->booksp);
 				}
 				free(pbook);
 				break;
@@ -300,6 +319,9 @@ int user(struct usr *pusr)
 					break;
 				}
 				printf("两次输入的密码不同，修改失败。");
+				break;
+			case 4:
+				usrhistoryprint(pusr->name);
 				break;
 			default:
 				return 0;
@@ -344,7 +366,8 @@ int adm_interface()
 	printf("*  2.添加书籍信息。                  *\n");
 	printf("*  3.添加书籍类型信息。              *\n");
 	printf("*  4.修改书籍信息。                  *\n");
-	printf("*  5,书籍借阅操作。                  *\n");
+	printf("*  5.书籍借阅操作。                  *\n");
+	printf("*  6.查看书库历史记录。              *\n");
 	printf("*  0.退出。                          *\n");
 	printf("*                                    *\n");
 	printf("*                                    *\n");
@@ -366,6 +389,7 @@ int user_interface()
 	printf("*      1.查询书籍信息              *\n");
 	printf("*      2.按类查找书籍              *\n");
 	printf("*      3.修改用户密码              *\n");
+	printf("*      4.查看本用户借阅记录        *\n");
 	printf("*      0.退出                      *\n");
 	printf("*                                  *\n");
 	printf("*                                  *\n");
@@ -388,7 +412,7 @@ struct bookdir *bookdiradd(struct bookdir *pbookdirhead,struct bookdir *pbookdir
 	else{
 		do{         /*遍历到目录链表最末尾的节点*/
 			if(!strcmp(pbookdirtemp->bookgroup,pbookdir->bookgroup)){
-				printf("类型已存在，添加失败。");
+				printf("类型已存在，添加失败。\n");
 				return pbookdirhead;
 			}
 			if(pbookdirtemp->next == NULL){
@@ -420,7 +444,7 @@ int bookadd(struct bookdir *pdirhead,struct book *pbook)
 		pdirtemp=pdirtemp->next;
 	}
 	if(pdirtemp == NULL){
-		printf("未匹配到该图书所属类型");
+		printf("未匹配到该图书所属类型\n");
 		return -1;
 	}
 	ptemp=pdirtemp->pdir;  /*进入图书某组中，将图书添加进去*/
@@ -563,7 +587,7 @@ struct book *bookdirdiscover(struct bookdir *pbookdirhead,char *group)
 {
 	struct bookdir *pbookdirtemp=NULL;
 	pbookdirtemp=pbookdirhead;
-	while((pbookdirtemp != NULL) && (strcmp(pbookdirtemp->bookgroup,group) != 0)){
+	while((strcmp(pbookdirtemp->bookgroup,group) != 0) && (pbookdirtemp != NULL)){
 		pbookdirtemp=pbookdirtemp->next;
 	}
 	if(pbookdirtemp == NULL){
@@ -586,6 +610,7 @@ int bookchange(struct bookdir *pbookdirhead)
 	struct book *pbooklast=NULL;
 	struct book *pbookch=NULL;
 	char name[20];
+	char t;
 	char writer[20];
 	int c=-1;
 	pbookch=(struct book *)malloc(sizeof(struct book));
@@ -604,27 +629,26 @@ int bookchange(struct bookdir *pbookdirhead)
 	do{
 		pbooktemp=pbookdirtemp->pdir;
 		do{
+			pbooklast=pbooktemp;  /*记录上一个节点的指针*/
 			if((!strcmp(pbooktemp->bookname,name)) && (!strcmp(pbooktemp->bookwriter,writer))){
 				break;
 			}
-			pbooklast=pbooktemp;  /*记录上一个节点的指针*/
 			pbooktemp=pbooktemp->next;  /*更新节点*/
-		}
-		while(pbooktemp != NULL);
-		if((!strcmp(pbooktemp->bookname,name)) && (!strcmp(pbooktemp->bookwriter,writer))){
+		}while(pbooktemp != NULL);
+		if((!strcmp(pbooklast->bookname,name)) && (!strcmp(pbooklast->bookwriter,writer))){
 			break;
 		}
 		pbookdirtemp=pbookdirtemp->next;
-	}
-	while(pbookdirtemp != NULL);
+	}while(pbookdirtemp != NULL);
 	if(pbookdirtemp == NULL){
-		printf("未查找到需要修改的书籍信息");
+		printf("未查找到需要修改的书籍信息\n");
 		return -1;
 	}
 
 	/*选择需要修改的方式*/
-	printf("请选择修改的方式：\n1.修改书籍信息。\n2.删除书籍的信息。\n3.取消操作。");
+	printf("请选择修改的方式：\n1.修改书籍信息。\n2.删除书籍的信息。\n3.取消操作。\n请选择：");
 	scanf("%d",&c);
+	getchar();
 	switch(c){
 		case 1:
 			printf("请输入修改后的书名：");
@@ -643,10 +667,15 @@ int bookchange(struct bookdir *pbookdirhead)
 				}
 			}
 			printf("确认修改？Y or N:");
-			if(getchar() == 'Y'){
-				pbooklast=pbookch;
-				pbookch->next=pbooktemp->next;
-				free(pbooktemp);
+			getchar();
+			scanf("%c",&t);
+			if((t == 'Y') || (t == 'y')){
+				strcpy(pbooktemp->bookname,pbookch->bookname);
+				strcpy(pbooktemp->bookwriter,pbookch->bookwriter);
+				strcpy(pbooktemp->bookgroup,pbookch->bookgroup);
+				pbooktemp->booknumber=pbookch->booknumber;
+				pbooktemp->booksp=pbookch->booksp;
+				free(pbookch);
 			}
 			else{
 				printf("已取消。");
@@ -655,7 +684,13 @@ int bookchange(struct bookdir *pbookdirhead)
 			break;
 		case 2:
 			printf("确认删除？Y or N:");
-			if(getchar() == 'Y'){
+			scanf("%c",&t);
+			if(t == 'Y' || t == 'y'){
+				if(pbookdirtemp->pdir == pbooktemp){
+					pbookdirtemp->next=NULL;
+					free(pbooktemp);
+					break;
+				}
 				pbooklast->next=pbooklast->next->next;
 				free(pbooktemp);
 			}
@@ -698,7 +733,7 @@ int bookprint(struct bookdir *pbookdirhead)
 /*用户登陆函数，返回登陆成功的用户的用户信息的节点指针*/
 struct usr *usrdenglu(struct usr *pusrhead)
 {
-	int i=0;
+	int i=1;
 	char name[20];
 	char password[20];
 	struct usr *pusrtemp=NULL;
@@ -715,13 +750,13 @@ struct usr *usrdenglu(struct usr *pusrhead)
 		pusrtemp=pusrtemp->next;
 	}
 	if(pusrtemp == NULL){
-		printf("无此用户。");
+		printf("无此用户。\n");
 		return NULL;
 	}
 	else{
 		printf("请输入密码：");
 		scanf("%s",password);
-		while(i <= 3){
+		while(i <= 2){
 			if(strcmp(pusrtemp->password,password) == 0){
 				return pusrtemp;
 			}
@@ -729,7 +764,7 @@ struct usr *usrdenglu(struct usr *pusrhead)
 			scanf("%s",password);
 			i++;
 		}
-		if(i==4){
+		if(i == 3){
 			printf("错误三次，取消登陆。");
 			return NULL;
 		}
@@ -737,9 +772,152 @@ struct usr *usrdenglu(struct usr *pusrhead)
 }
 
 
+struct history *usrhistoryadd(struct history *phead,struct history *pnew)
+{
+	struct history *ptemp=NULL;
+	pnew->next=NULL;
+	ptemp=phead;
+	if(phead == NULL){
+		return pnew;
+	}
+	else{
+		while(ptemp->next != NULL){
+			ptemp=ptemp->next;
+		}
+		ptemp->next=pnew;
+		return phead;
+	}
+}
+
+
+/*载入用书专属文件信息*/
+
+struct history *usrhistoryload(const char *name)
+{
+	struct history *pnew=NULL;
+	struct history *phead=NULL;
+	FILE *fp=NULL;
+	char s[5]=".txt";
+	char s2[20];
+	int m=0,n=0;
+	strcpy(s2,name);
+	do{
+		n++;
+	}while(s2[n] != '\0');
+	do{
+		s2[n++]=s[m];
+	}while(s[m++] != '\0');
+	if((fp=fopen(s2,"rt")) == NULL){
+		return NULL;
+	}
+	pnew=(struct history *)malloc(sizeof(struct history));
+	while(fscanf(fp,"%c %s %s %s",&pnew->flag,pnew->bookname,pnew->bookwriter,pnew->usrname) != -1){
+		phead=usrhistoryadd(phead,pnew);
+		pnew=(struct history *)malloc(sizeof(struct history));
+		pnew->next=NULL;
+	}
+	free(pnew);
+	return phead;
+}
+
+
+/*根据指定的用户名输出用户的借阅历史信息*/
+void usrhistoryprint(const char *name)
+{
+	FILE *fp=NULL;
+	char s1[5]=".txt";
+	char s2[20];
+	char s[50];
+	int m=0,n=0;
+	strcpy(s2,name);
+	do{
+		n++;
+	}while(s2[n] != '\0');
+	do{
+		s2[n++]=s1[m];
+	}while(s1[m++] != '\0');
+	if((fp=fopen(s2,"rt")) == NULL){
+		exit(0);
+	}
+	while(fgets(s,50,fp) != NULL){
+		printf("%s",s);
+	}
+	fclose(fp);
+}
+
+
+/*管理员进行书籍借还操作时，将借还历史记录进用户专属文件*/
+
+int usrhistorysave(char flag,struct book *pbook,const char *name,char *time)
+{
+	FILE *fp=NULL;
+	struct history *phead=NULL,*ptemp=NULL;
+	char f='0';
+	char s[5]=".txt";
+	char s2[20];
+	int m=0,n=0;
+	phead=usrhistoryload(name);
+	ptemp=phead;
+	strcpy(s2,name);
+	do{
+		n++;
+	}while(s2[n] != '\0');
+	do{
+		s2[n++]=s[m];
+	}while(s[m++] != '\0');
+	
+	if((fp=fopen(s2,"at")) == NULL){
+		return -1;
+	}
+	while(ptemp != NULL){
+		if((strcmp(ptemp->bookname,pbook->bookname) == 0) && (strcmp(ptemp->bookwriter,pbook->bookwriter) == 0)){
+			if(f == '0'){
+				if(ptemp->flag == 'r'){  /*若纪录中出现 未借便还 的情况，则报错*/
+					fclose(fp);
+					return 1;
+				}
+			}
+			else{
+				if(f != ptemp->flag){  /*若记录中出现连续两次 借或还 同一本书的信息，则报错*/
+					fclose(fp);
+					return -1;
+				}
+			}
+			switch(ptemp->flag){
+				case 'b':
+					f='r';
+					break;
+				case 'r':
+					f='b';
+					break;
+			}
+		}
+		ptemp=ptemp->next;
+	}
+	if(flag == f || ((f == '0') && (flag == 'b'))){/*若欲进行操作与应进行操作相符合，将该操作记录存进用户所属文件，返回1*/
+		fprintf(fp,"%c %s %s %s %s",flag,pbook->bookname,pbook->bookwriter,name,time);
+		fclose(fp);
+		return 0;
+	}
+	else{
+		if(f == 'r'){
+			fclose(fp);
+			return 1;
+		}
+		else if(f == 'b'){
+			fclose(fp);
+			return 2;
+		}
+		fclose(fp);
+	}
+}
+
+
+
+
 /*书籍管理员进行书籍的借出归还操作，并记录进历史档案*/
 
-int bookoperation(struct book *pbook,char *name,int number,char flag)
+int bookoperation(struct book *pbook,const char *name,char flag)
 {
 	time_t now;
 	FILE *fp=NULL;
@@ -749,19 +927,46 @@ int bookoperation(struct book *pbook,char *name,int number,char flag)
 	time(&now);
 	switch(flag){
 		case 'b':
-			if(pbook->booksp >= number){
-				pbook->booksp=pbook->booksp-number;
-				printf("%s %s %s %d %d\n",pbook->bookname,pbook->bookwriter,pbook->bookgroup,pbook->booknumber,pbook->booksp);
-				fprintf(fp,"%s %s %s %s %d %s\n","borrow",pbook->bookname,pbook->bookwriter,name,number,ctime(&now));
+			if(pbook->booksp >= 1){
+				switch(usrhistorysave(flag,pbook,name,ctime(&now))){
+					case -1:
+						printf("操作失败。");
+						return 0;
+						break;
+					case 0:
+						break;
+					case 1:
+						printf("该用户未借过这本书.");
+						return 0;
+					case 2:
+						printf("该用户借过此本书未还.");
+						break;
+				}
+				pbook->booksp--;
+				fprintf(fp,"%s %s %s %s %s\n","b",pbook->bookname,pbook->bookwriter,name,ctime(&now));
 			}
 			else{
 				return -1;
 			}
 			break;
 		case 'r':
-			if(pbook->booknumber >= (pbook->booksp+number)){
-				pbook->booksp=pbook->booksp+number;
-				fprintf(fp,"%s %s %s %s %d %s\n","return",pbook->bookname,pbook->bookwriter,name,number,ctime(&now));
+			if(pbook->booknumber >= pbook->booksp+1){
+				switch(usrhistorysave(flag,pbook,name,ctime(&now))){
+					case -1:
+						printf("操作失败。");
+						return 0;
+						break;
+					case 0:
+						break;
+					case 1:
+						printf("该用户未借过这本书.");
+						return 0;
+					case 2:
+						printf("该用户借过此本书未还.");
+						break;
+				}
+				pbook->booksp++;
+				fprintf(fp,"%s %s %s %s %s","r",pbook->bookname,pbook->bookwriter,name,ctime(&now));
 			}
 			else{
 				return -1;
@@ -816,31 +1021,6 @@ struct usr *usrload(void)
 	}while(flag != NULL);
 	fclose(fp);
 	return pusrhead;
-}
-
-
-/*用户信息对比*/
-int usrcmp(struct usr *pusrhead,struct usr *pusr)
-{
-	struct usr *pusrtemp=NULL;
-	pusrtemp=pusrhead;
-	if(pusrhead == NULL){
-		return -1;
-	}
-	while(pusrtemp != NULL){
-		if(strcmp(pusrtemp->name,pusr->name) == 0){
-			break;
-		}
-		pusrtemp=pusrtemp->next;
-	}
-	if(pusrtemp == NULL){
-		return 1;
-	}
-	else{
-		if(strcmp(pusrtemp->password,pusr->password) == 0){
-			return 0;
-		}
-	}
 }
 
 
